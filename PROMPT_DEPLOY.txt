@@ -1,0 +1,18 @@
+PROMPT PARA CLAUDE EN LA TERMINAL (Claude Code)
+================================================
+
+Abre la terminal dentro de la carpeta "BESTIAS WEB" y pega esto:
+
+---
+Sube esta carpeta a un nuevo repositorio de GitHub llamado "bestias-web" y
+publícala con GitHub Pages. Es un sitio estático de un solo archivo (index.html),
+no necesita build. Haz lo siguiente y al final dame la URL pública:
+
+1. git init, agrega todo y haz el primer commit.
+2. Crea el repo en GitHub (usa la CLI `gh` si está disponible; si no, dime los
+   pasos manuales) y haz push a la rama main.
+3. Activa GitHub Pages en la rama main / carpeta root.
+4. Devuélveme la URL final (https://<usuario>.github.io/bestias-web/).
+---
+
+Nota: si te pide autenticación de GitHub, sigue las instrucciones de `gh auth login`.
