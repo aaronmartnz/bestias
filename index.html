@@ -68,6 +68,9 @@
     padding:clamp(42px,6.5vh,72px) 22px clamp(12px,2.2vh,30px);
     display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
     gap:clamp(9px,1.7vh,24px)}
+  /* la unica que cede alto es la ilustracion (.stage lo redefine abajo).
+     Sin esto los textos se encogen hasta 0 y se encinan unos sobre otros. */
+  .wrap>*{flex-shrink:0}
   .eyebrow{display:inline-flex;align-items:center;gap:10px;font-size:clamp(10px,1.4vh,13px);letter-spacing:.28em;text-transform:uppercase;
     color:var(--coral-deep);border:1.5px solid var(--coral);border-radius:999px;padding:clamp(5px,1vh,8px) clamp(12px,2vw,18px);background:rgba(255,255,255,.35)}
   .dot{width:8px;height:8px;border-radius:50%;background:var(--coral);animation:pulse 1.8s ease-in-out infinite}
@@ -262,7 +265,7 @@
   input[type=email]:focus{border-color:var(--coral-deep);background:#fff}
   button{font-family:inherit;font-size:clamp(13px,1.7vh,15px);font-weight:600;padding:clamp(9px,1.4vh,14px) clamp(18px,3vw,26px);border:1.5px solid var(--coral);border-radius:12px;background:var(--coral);color:#fff;cursor:pointer;transition:transform .12s,background .2s}
   button:hover{background:var(--coral-deep);transform:translateY(-1px)}
-  .msg{font-size:clamp(11px,1.5vh,14px);min-height:0;color:var(--coral-deep)}
+  .msg{font-size:clamp(11px,1.5vh,14px);min-height:1.3em;color:var(--coral-deep)}
   .social{display:flex;gap:clamp(10px,1.6vw,16px);align-items:center}
   .social a{display:grid;place-items:center;width:clamp(34px,4.4vh,44px);height:clamp(34px,4.4vh,44px);border:1.5px solid var(--coral);border-radius:50%;color:var(--coral);transition:background .2s,color .2s,transform .12s}
   .social a:hover{background:var(--coral);color:#fff;transform:translateY(-2px)}
@@ -289,7 +292,7 @@
   @media(max-width:760px){
     .logo{width:26px;top:14px;left:14px}
     /* aqui NO queremos que todo quepa a la fuerza: se lee haciendo scroll */
-    .wrap{justify-content:flex-start;padding:58px 16px 40px;gap:20px}
+    .wrap{flex:0 0 auto;justify-content:flex-start;padding:58px 16px 40px;gap:20px}
     .stage{flex:none;max-width:100%;width:100%;max-height:none}
     .illus{width:100%;height:auto;max-height:none}
     .claim{font-size:clamp(25px,7.6vw,36px);max-width:14ch}
@@ -1012,21 +1015,26 @@
           }))).filter(Boolean);
           if(!Array.isArray(data)&&data.ronquido)
             nombreRonquido=data.ronquido.replace(/\.[^.]+$/,'');
-          decodificar();   // dejarlos listos antes del primer clic
+          // Ojo: NO se crea aqui el AudioContext. iOS Safari es estricto y un
+          // contexto nacido fuera de un gesto del usuario se queda mudo.
         }catch(e){/* sin samples: se usa el sintetizador */}
       })();
 
-      // decodifica los mp3 al banco. El AudioContext puede crearse antes de que
-      // el usuario toque nada (arranca suspendido); decodeAudioData funciona igual.
+      // Decodifica los mp3 al banco. Devuelve una promesa para poder esperarla:
+      // asi el primer sonido ya sale del sample real y no del sintetizador.
+      let decodePromesa=null;
       function decodificar(){
-        if(decoded||!raw.length)return;
-        decoded=true;
+        if(decodePromesa)return decodePromesa;
+        if(!raw.length)return Promise.resolve();
         const c=init();
-        raw.forEach(r=>{
-          try{c.decodeAudioData(r.ab.slice(0),
-            b=>{banco[r.nombre]=b;if(r.nombre!==nombreRonquido)nombres.push(r.nombre);},
-            ()=>{})}catch(e){}
-        });
+        decodePromesa=Promise.all(raw.map(r=>new Promise(res=>{
+          try{
+            c.decodeAudioData(r.ab.slice(0),
+              b=>{banco[r.nombre]=b;if(r.nombre!==nombreRonquido)nombres.push(r.nombre);res();},
+              ()=>res());
+          }catch(e){res();}
+        })));
+        return decodePromesa;
       }
 
       function init(){
@@ -1237,7 +1245,12 @@
         // ---- dormir / despertar
         sleep(){
           if(!on||snoreStop)return;
-          const c=init();
+          // El inactivo salta a los 15s sin que el usuario haya tocado nada.
+          // Crear aqui el AudioContext lo dejaria inservible en iOS y despues
+          // ningun sonido volveria a oirse: si no existe todavia, no hay ronquido
+          // (la onda visual si corre igual).
+          if(!ctx)return;
+          const c=ctx;
           if(c.state==='suspended')c.resume().catch(()=>{});
           let alive=true,timer=null,fuente=null;
           if(nombreRonquido&&banco[nombreRonquido]){
@@ -1274,7 +1287,6 @@
           if(!on)return;
           const c=init();
           const fire=()=>{
-            decodificar();
             // garantiza volumen audible: si un fundido anterior quedo a medias,
             // el rugido saldria mudo sin que se note por que
             const t=c.currentTime;
@@ -1291,10 +1303,11 @@
             if(i<nombres.length)sample(nombres[i]);
             else synth(NAMES[i-nombres.length]);
           };
-          // en el primer clic el contexto viene suspendido: hay que esperar el resume
-          // o el rugido se agenda en un tiempo que ya pasó y se corta
-          if(c.state==='suspended')c.resume().then(fire,fire);
-          else fire();
+          // resume() debe salir del gesto mismo; el disparo espera a que el
+          // banco este decodificado para que suene el sample y no el sintetizador
+          const listo=()=>decodificar().then(fire,fire);
+          if(c.state==='suspended')c.resume().then(listo,listo);
+          else listo();
         },
         toggle(){on=!on;localStorage.setItem('bestias-sfx',on?'on':'off');return on;},
         get cargados(){return nombres.slice();},   // que samples reales estan listos
