@@ -810,7 +810,9 @@
       <div class="cell"><div class="n" id="s">00</div><div class="l">Seg</div></div>
     </div>
     <form id="form" novalidate>
-      <input type="email" id="email" placeholder="tu@correo.com" aria-label="Correo electrónico" required />
+      <input type="email" id="email" name="email" placeholder="tu@correo.com" aria-label="Correo electrónico" required />
+      <input type="hidden" name="_subject" value="Nuevo correo desde bestias.gallery" />
+      <input type="text" name="_gotcha" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0" />
       <button type="submit">Avísenme</button>
     </form>
     <p class="msg" id="msg">Déjanos tu correo y te escribimos cuando abramos.</p>
@@ -843,11 +845,37 @@
 
     // ==== Email ====
     const form=el('form'),msg=el('msg');
-    form.addEventListener('submit',e=>{e.preventDefault();
+    // ==== Captura de correos ====
+    // Pega aqui el endpoint de Formspree (https://formspree.io/f/XXXXXXX).
+    // Mientras este vacio el formulario solo confirma en pantalla y NO guarda nada.
+    const FORM_ENDPOINT='';
+
+    const boton=form.querySelector('button');
+    form.addEventListener('submit',async e=>{e.preventDefault();
       try{SFX.play('gallina')}catch(err){}          // al apretar "Avísenme" cacarean
       const v=el('email').value.trim();
       if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)){msg.textContent='Escribe un correo válido, porfa.';return;}
-      msg.textContent='¡Gracias! Te avisamos cuando abramos. ✦';form.reset();});
+
+      if(!FORM_ENDPOINT){                            // sin endpoint: solo confirmacion visual
+        msg.textContent='¡Gracias! Te avisamos cuando abramos. ✦';form.reset();return;
+      }
+
+      const antes=boton.textContent;
+      boton.disabled=true;boton.textContent='Enviando…';msg.textContent='';
+      try{
+        const r=await fetch(FORM_ENDPOINT,{
+          method:'POST',
+          headers:{'Accept':'application/json'},
+          body:new FormData(form)
+        });
+        if(!r.ok)throw new Error(r.status);
+        msg.textContent='¡Gracias! Te avisamos cuando abramos. ✦';form.reset();
+      }catch(err){
+        msg.textContent='No se pudo enviar. Escríbenos a hola@bestias.gallery';
+      }finally{
+        boton.disabled=false;boton.textContent=antes;
+      }
+    });
 
     // ==== Fondo: azulejos (cuadraditos) que se deforman magneticamente, detras del contenido ====
     const cv=el('grid'),ctx=cv.getContext('2d');
