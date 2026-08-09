@@ -915,7 +915,7 @@
 
     const boton=form.querySelector('button');
     form.addEventListener('submit',async e=>{e.preventDefault();
-      try{SFX.play('gallina')}catch(err){}          // al apretar "Avísenme" cacarean
+      if(ACTIVAR.sonidoClic){try{SFX.play('gallina')}catch(err){}}   // "Avísenme" cacarea
       const v=el('email').value.trim();
       if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)){msg.textContent='Escribe un correo válido, porfa.';return;}
 
@@ -1009,6 +1009,14 @@
     // ==== Sonido de bestia ====
     // Si existe sfx/list.json con archivos de audio, los usa (calidad real).
     // Si no, sintetiza el rugido en el navegador: sin archivos ni dependencias.
+    // ==== Interruptores ====
+    // Apagados a proposito. El codigo sigue completo: para revivirlos
+    // basta poner true aqui, no hay que tocar nada mas.
+    const ACTIVAR={
+      sonidoClic:false,    // rugidos al tocar cuadros, pajaro y "Avisenme"
+      imagenCactus:false   // la sorpresa del cactus
+    };
+
     const SFX=(()=>{
       let ctx=null,master=null,verb=null,noiseBuf=null,snoreBus=null,desbloqueado=false;
       let raw=[],banco={},nombres=[],decoded=false;   // banco: nombre -> AudioBuffer
@@ -1338,10 +1346,24 @@
           else listo();
         },
         toggle(){on=!on;localStorage.setItem('bestias-sfx',on?'on':'off');return on;},
+        // destraba la salida sin reproducir nada: hace falta para que el
+        // ronquido pueda sonar cuando los sonidos de clic estan apagados
+        desbloquear(){
+          if(!on)return;
+          const c=init();
+          if(c.state==='suspended')c.resume().catch(()=>{});
+          decodificar();
+        },
         get cargados(){return nombres.slice();},   // que samples reales estan listos
         get on(){return on;}
       };
     })();
+
+    // Con los sonidos de clic apagados nadie llama a play(), asi que el audio
+    // nunca se destrabaria y el ronquido tambien quedaria mudo. Se destraba en
+    // el primer toque, en silencio.
+    if(!ACTIVAR.sonidoClic)
+      addEventListener('pointerdown',()=>{try{SFX.desbloquear()}catch(e){}},{once:true});
 
     // ==== La bestia se duerme ====
     // 15s sin actividad: ronca. Una onda sale del centro de la pantalla,
@@ -1525,6 +1547,7 @@
 
     // El cactus esconde una sorpresa
     (()=>{
+      if(!ACTIVAR.imagenCactus)return;      // apagado: no se crea ni la zona de toque
       const svg=document.querySelector('svg.illus');
       const capa=document.getElementById('manos');
       if(!svg||!capa)return;
@@ -1548,7 +1571,7 @@
     const pajaro=document.getElementById('bird');
     if(pajaro){
       pajaro.addEventListener('click',()=>{
-        try{SFX.play('dino')}catch(e){}
+        if(ACTIVAR.sonidoClic){try{SFX.play('dino')}catch(e){}}
         apply(pajaro,FX.find(f=>f.name==='shake'),0);
       });
     }
@@ -1560,7 +1583,7 @@
         const n=parseInt(cell.dataset.frame,10)||1;
         const lead=FX[(n-1)%FX.length];
 
-        SFX.play();
+        if(ACTIVAR.sonidoClic)SFX.play();
 
         cell.classList.add('busy');
         setTimeout(()=>cell.classList.remove('busy'),lead.ms);
